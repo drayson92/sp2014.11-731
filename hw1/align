@@ -7,7 +7,7 @@ import difflib
 from math import exp
 from collections import defaultdict
 
-penalties = defaultdict(float)
+orth_penalties = defaultdict(float)
 
 def em_iteration(t, opts, bitext):
   count = defaultdict(int)
@@ -19,8 +19,10 @@ def em_iteration(t, opts, bitext):
       n_f = f.count(w_f)
       total_s = sum([t[(w_f, w_e)] * n_f for w_e in e])
       for (j, w_e) in enumerate(e):
+        diag_penalty = abs(float(i)/len(f) - float(j)/len(e))
+
         n_e = e.count(w_e)
-        count[(w_f, w_e)] += t[(w_f, w_e)] * n_f * n_e / total_s
+        count[(w_f, w_e)] += t[(w_f, w_e)] * n_f * n_e / total_s * exp(-diag_penalty*4)
         total[w_e] += t[(w_f, w_e)] * n_f * n_e / total_s
         w_e_to_valid_w_f[w_e].add(w_f)
 
@@ -30,15 +32,14 @@ def em_iteration(t, opts, bitext):
   sys.stderr.write("\nProcessed all sentences\n")
   for w_e in total.keys():
     for w_f in w_e_to_valid_w_f[w_e]:
-
-      if not penalties[(w_f,w_e)]:
+      if not orth_penalties[(w_f,w_e)]:
         dist = 1 - difflib.SequenceMatcher(None, w_f.lower(), w_e.lower()).ratio()
-        penalty = exp(-dist * 0.5)
-        penalties[(w_f,w_e)] = penalty
+        orth_penalty = exp(-dist * 0.5)
+        orth_penalties[(w_f,w_e)] = orth_penalty
       else:
-        penalty = penalties[(w_f,w_e)]
+        orth_penalty = orth_penalties[(w_f,w_e)]
 
-      t[(w_f, w_e)] = count[(w_f, w_e)] / total[w_e] * penalty
+      t[(w_f, w_e)] = count[(w_f, w_e)] / total[w_e] * orth_penalty
 
 def print_best_alignments(t, opts, bitext):
   for (f, e) in bitext:
@@ -61,7 +62,7 @@ if __name__ == '__main__':
   (opts, _) = optparser.parse_args()
 
   #t = defaultdict(lambda: random.uniform(0,1))
-  t = defaultdict(lambda: 0.08)
+  t = defaultdict(lambda: 0.5)
   bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
 
   for i in range(opts.iterations):
