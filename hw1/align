@@ -2,10 +2,12 @@
 import optparse
 import sys
 import random
+import operator
+import difflib
+from math import exp
 from collections import defaultdict
 
-def uniform_0_1():
-  return random.uniform(0, 1)
+penalties = defaultdict(float)
 
 def em_iteration(t, opts, bitext):
   count = defaultdict(int)
@@ -13,10 +15,10 @@ def em_iteration(t, opts, bitext):
   w_e_to_valid_w_f = defaultdict(set)
 
   for (n, (f, e)) in enumerate(bitext):
-    for w_f in f:
+    for (i, w_f) in enumerate(f):
       n_f = f.count(w_f)
       total_s = sum([t[(w_f, w_e)] * n_f for w_e in e])
-      for w_e in e:
+      for (j, w_e) in enumerate(e):
         n_e = e.count(w_e)
         count[(w_f, w_e)] += t[(w_f, w_e)] * n_f * n_e / total_s
         total[w_e] += t[(w_f, w_e)] * n_f * n_e / total_s
@@ -28,7 +30,15 @@ def em_iteration(t, opts, bitext):
   sys.stderr.write("\nProcessed all sentences\n")
   for w_e in total.keys():
     for w_f in w_e_to_valid_w_f[w_e]:
-      t[(w_f, w_e)] = count[(w_f, w_e)] / total[w_e]
+
+      if not penalties[(w_f,w_e)]:
+        dist = 1 - difflib.SequenceMatcher(None, w_f.lower(), w_e.lower()).ratio()
+        penalty = exp(-dist * 0.5)
+        penalties[(w_f,w_e)] = penalty
+      else:
+        penalty = penalties[(w_f,w_e)]
+
+      t[(w_f, w_e)] = count[(w_f, w_e)] / total[w_e] * penalty
 
 def print_best_alignments(t, opts, bitext):
   for (f, e) in bitext:
@@ -50,7 +60,8 @@ if __name__ == '__main__':
                        help="Number of sentences to use for training and alignment")
   (opts, _) = optparser.parse_args()
 
-  t = defaultdict(uniform_0_1)
+  #t = defaultdict(lambda: random.uniform(0,1))
+  t = defaultdict(lambda: 0.08)
   bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
 
   for i in range(opts.iterations):
