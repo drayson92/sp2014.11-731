@@ -9,8 +9,8 @@ def extract_features(hyp, ref):
   full_weight = 1.0
   trunc_weight = 1.0
 
-  hwords = hyp.lower().split(' -')
-  rwords = ref.lower().split(' -')
+  hwords = hyp.lower().split()
+  rwords = ref.lower().split()
   hypset = set(hwords)
   refset = set(rwords)
 
