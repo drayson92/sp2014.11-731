@@ -5,9 +5,17 @@ import json
 import os, sys, math, string
 
 def extract_features(hyp, ref):
-  alpha = 0.85
-  full_weight = 1.0
-  trunc_weight = 1.0
+  meteor = compute_meteor(hyp, ref)
+  return {'meteor':meteor}
+
+def compute_meteor(hyp, ref):
+  alpha = 1.0
+  full_weight = 0.5
+  trunc_weight = 0.5
+
+  #alpha = float(args.alpha)
+  #full_weight = float(args.full)
+  #trunc_weight = float(args.trunc)
 
   hwords = hyp.lower().split()
   rwords = ref.lower().split()
@@ -29,10 +37,13 @@ def extract_features(hyp, ref):
   except ZeroDivisionError:
     meteor = 0.0
 
-  return {'meteor':meteor}
+  return meteor
 
 argparser = argparse.ArgumentParser(prog='extract')
 argparser.add_argument('-x', '--pairs', dest='pairs', default='data/en-cs.pairs', help='Reference-Hypothesis pairs')
+argparser.add_argument('-a', dest='alpha')
+argparser.add_argument('-f', dest='full')
+argparser.add_argument('-t', dest='trunc')
 
 args = argparser.parse_args()
 
