@@ -27,10 +27,10 @@ def compute_meteor(hyp, ref):
   hypset_trunc = set(hwords_trunc)
   refset_trunc = set(rwords_trunc)
 
-  precision = (sum(full_weight for word in hwords if word in refset) + \
-              sum(trunc_weight for word in hwords_trunc if word in refset_trunc)) / len(hwords)
-  recall = (sum(full_weight for word in rwords if word in hypset) + \
-              sum(trunc_weight for word in rwords_trunc if word in hypset_trunc)) / len(rwords)
+  precision = (sum(full_weight for word in hypset if word in refset) + \
+              sum(trunc_weight for word in hypset_trunc if word in refset_trunc)) / len(hypset)
+  recall = (sum(full_weight for word in refset if word in hypset) + \
+              sum(trunc_weight for word in refset_trunc if word in hypset_trunc)) / len(refset)
 
   try:
     meteor = (precision*recall) / (alpha*precision + (1.0-alpha)*recall)
