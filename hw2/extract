@@ -6,7 +6,8 @@ import os, sys, math, string
 
 def extract_features(hyp, ref):
   recall = compute_recall(hyp, ref)
-  return {'recall':recall}
+  exact = 1 if hyp == ref else 0
+  return {'recall':recall, 'exact':exact}
 
 def compute_recall(hyp, ref):
   full_weight = 0.5
@@ -19,8 +20,8 @@ def compute_recall(hyp, ref):
   hypset = set(hwords)
   refset = set(rwords)
 
-  hwords_trunc = [word[:6] for word in hwords]
-  rwords_trunc = [word[:6] for word in rwords]
+  hwords_trunc = [word[:3] for word in hwords]
+  rwords_trunc = [word[:3] for word in rwords]
   hypset_trunc = set(hwords_trunc)
   refset_trunc = set(rwords_trunc)
 
