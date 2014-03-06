@@ -5,15 +5,12 @@ import json
 import os, sys, math, string
 
 def extract_features(hyp, ref):
-  meteor = compute_meteor(hyp, ref)
-  return {'meteor':meteor}
+  recall = compute_recall(hyp, ref)
+  return {'recall':recall}
 
-def compute_meteor(hyp, ref):
-  alpha = 1.0
+def compute_recall(hyp, ref):
   full_weight = 0.5
   trunc_weight = 0.5
-
-  #alpha = float(args.alpha)
   #full_weight = float(args.full)
   #trunc_weight = float(args.trunc)
 
@@ -27,21 +24,13 @@ def compute_meteor(hyp, ref):
   hypset_trunc = set(hwords_trunc)
   refset_trunc = set(rwords_trunc)
 
-  precision = (sum(full_weight for word in hypset if word in refset) + \
-              sum(trunc_weight for word in hypset_trunc if word in refset_trunc)) / len(hypset)
   recall = (sum(full_weight for word in refset if word in hypset) + \
               sum(trunc_weight for word in refset_trunc if word in hypset_trunc)) / len(refset)
 
-  try:
-    meteor = (precision*recall) / (alpha*precision + (1.0-alpha)*recall)
-  except ZeroDivisionError:
-    meteor = 0.0
-
-  return meteor
+  return recall
 
 argparser = argparse.ArgumentParser(prog='extract')
 argparser.add_argument('-x', '--pairs', dest='pairs', default='data/en-cs.pairs', help='Reference-Hypothesis pairs')
-argparser.add_argument('-a', dest='alpha')
 argparser.add_argument('-f', dest='full')
 argparser.add_argument('-t', dest='trunc')
 
