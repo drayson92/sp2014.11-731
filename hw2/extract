@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import codecs
 import os, sys, math, string
 
 def extract_features(hyp, ref):
@@ -40,7 +41,7 @@ args = argparser.parse_args()
 lc = 0
 sys.stderr.write('Extracting features for (ref,hyp) pairs from %s.\n' % args.pairs)
 # loop over all (ref,hyp) pairs in the input file and extract evaluation features
-for ref_hyp in open(args.pairs):
+for ref_hyp in codecs.open(args.pairs, encoding='utf-8'):
   lc += 1
   ref, hyp = ref_hyp.rstrip().split(' ||| ')
   fmap = extract_features(hyp, ref)
