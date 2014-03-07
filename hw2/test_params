@@ -1,0 +1,28 @@
+#!/usr/bin/python2
+
+import subprocess
+from subprocess import PIPE
+
+max_tau = 0.0
+max_alpha = 0.0
+max_full = 0.0
+max_trunc = 0.0
+
+values = [0.1*x for x in xrange(1,11)]
+
+for alpha in values:
+  for full_weight in values:
+    for trunc_weight in values:
+      p = subprocess.Popen("./extract -a %f -f %f -t %f > myfeatures.json ; ./fit --l2 1.0 < myfeatures.json > weights.json ; ./score -w weights.json < myfeatures.json > output.txt ; ./evaluate < output.txt" % (alpha, full_weight, trunc_weight), shell=True, stdout=PIPE, stderr=PIPE)
+
+      tau = float(p.stdout.readlines()[0].strip())
+
+      print '(%.1f, %.1f, %.1f): tau=%.3f' % (alpha, full_weight, trunc_weight, tau)
+      if tau > max_tau:
+        print "new max!"
+        max_tau = tau
+        max_alpha = alpha
+        max_full = full_weight
+        max_trunc = trunc_weight
+
+print '\nMax: (%.1f, %.1f, %.1f): tau=%.3f' % (max_alpha, max_full, max_trunc, max_tau)
