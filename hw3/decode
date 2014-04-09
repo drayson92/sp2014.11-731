@@ -3,6 +3,7 @@ import argparse
 import sys
 import models
 import heapq
+import itertools
 from collections import namedtuple
 
 parser = argparse.ArgumentParser(description='Simple phrase based decoder.')
@@ -28,30 +29,46 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, set())
+    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset())
 
     stacks = [{} for _ in f] + [{}]
-    stacks[0][lm.begin()] = initial_hypothesis
+    stacks[0][(lm.begin(), frozenset())] = initial_hypothesis
     for i, stack in enumerate(stacks[:-1]):
         # extend the top s hypotheses in the current stack
         for h in heapq.nlargest(opts.s, stack.itervalues(), key=lambda h: h.logprob): # prune
-            for j in xrange(i+1,len(f)+1):
-                if f[i:j] in tm:
-                    for phrase in tm[f[i:j]]:
+            assert(len(h.covered_words) == i)
+            for s in xrange(0, len(f)+1):
+              for e in xrange(s+1, len(f)+1):
+                  new_words = set(xrange(s, e))
+                  assert(len(new_words) == e-s)
+                  if not h.covered_words.isdisjoint(new_words):
+                    continue
+
+                  if f[s:e] in tm:
+                    for phrase in tm[f[s:e]]:
                         logprob = h.logprob + phrase.logprob
                         lm_state = h.lm_state
                         for word in phrase.english.split():
                             (lm_state, word_logprob) = lm.score(lm_state, word)
                             logprob += word_logprob
-                        logprob += lm.end(lm_state) if j == len(f) else 0.0
-                        new_words = set(range(i, j))
-                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase, h.covered_words | new_words)
-                        assert(h.covered_words.isdisjoint(new_words))
-                        if lm_state not in stacks[j] or stacks[j][lm_state].logprob < logprob: # second case is recombination
-                            stacks[j][lm_state] = new_hypothesis 
+                        logprob += lm.end(lm_state) if e == len(f) else 0.0
+                        new_covered_words = h.covered_words | new_words
+                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words)
+                        
+                        key = (lm_state, new_covered_words, s)
+                        new_stack = len(h.covered_words) + len(new_words)
+                        assert(new_stack == len(new_covered_words))
+                        if key not in stacks[new_stack] or stacks[new_stack][key].logprob < logprob: # second case is recombination
+                            stacks[new_stack][key] = new_hypothesis
+                  else:
+                    pass
 
     # find best translation by looking at the best scoring hypothesis
     # on the last stack
+    if opts.verbose:
+      stack_lens = [len(s) for s in stacks]
+      print "Stack sizes: %s" % stack_lens
+
     winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
     assert(len(winner.covered_words) == len(f))
     def extract_english_recursive(h):
