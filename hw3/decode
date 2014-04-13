@@ -79,6 +79,21 @@ def range_translatable(f, i, j):
            (f[j-2:j] in tm and range_translatable(f, i, j-2)) or \
            (f[j-3:j] in tm and range_translatable(f, i, j-3))
 
+def future_cost(covered_words, f):
+    phrase_start = 0
+    phrase_end = 0
+    logprob = 0
+    for phrase_end in covered_words:
+        if not(phrase_end == phrase_start):
+            phrase = f[phrase_start:phrase_end]
+            if phrase in tm:
+                logprob = logprob + tm[phrase][0].logprob
+            else:
+                logprob = float("-inf")
+        phrase_start = phrase_end+1
+
+    return logprob
+
 tm = models.TM(opts.tm, sys.maxint)
 lm = models.LM(opts.lm)
 sys.stderr.write('Decoding %s...\n' % (opts.input,))
@@ -93,7 +108,7 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset())
+    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset(), 0.0)
 
     stacks = [{} for _ in f] + [{}]
     stacks[0][(lm.begin(), frozenset())] = initial_hypothesis
@@ -125,7 +140,7 @@ for f in input_sents:
                         if not gaps_translatable(new_covered_words, f):
                           continue
 
-                        new_future_cost = 0
+                        new_future_cost = future_cost(new_covered_words, f)
                         logprob = logprob + new_future_cost
                         new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words, new_future_cost)
                         
@@ -157,18 +172,4 @@ for f in input_sents:
         sys.stderr.write('LM = %f, TM = %f, Total = %f\n' % 
             (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
 
-def future_cost(covered_words, f, tm):
-    phrase_start = 0
-    phrase_end = 0
-    logprob = 0
-    for i in xrange(len(covered_words)):
-        phrase_end = covered_words[i]
-        if not(phrase_end == phrase_start):
-            phrase = f[phrase_start:phrase_end]
-            if phrase in tm:
-                logprob = logprob + tm[phrase][0].logprob
-            else:
-                logprob = float("-inf")
-        phrase_start = covered_words[i]+1
 
-    return logprob
