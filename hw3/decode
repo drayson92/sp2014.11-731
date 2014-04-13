@@ -20,7 +20,7 @@ lm = models.LM(opts.lm)
 sys.stderr.write('Decoding %s...\n' % (opts.input,))
 input_sents = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
 
-hypothesis = namedtuple('hypothesis', 'logprob, lm_state, predecessor, phrase, covered_words')
+hypothesis = namedtuple('hypothesis', 'logprob, lm_state, predecessor, phrase, covered_words, future_cost')
 for f in input_sents:
     # The following code implements a DP monotone decoding
     # algorithm (one that doesn't permute the target phrases).
@@ -46,20 +46,24 @@ for f in input_sents:
 
                   if f[s:e] in tm:
                     for phrase in tm[f[s:e]]:
-                        logprob = h.logprob + phrase.logprob
+                       
+                        logprob = h.logprob + phrase.logprob - h.future_cost
                         lm_state = h.lm_state
                         for word in phrase.english.split():
                             (lm_state, word_logprob) = lm.score(lm_state, word)
                             logprob += word_logprob
                         logprob += lm.end(lm_state) if e == len(f) else 0.0
                         new_covered_words = h.covered_words | new_words
-                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words)
+                        new_future_cost = 0
+                        logprob = logprob + new_future_cost
+                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words, new_future_cost)
                         
                         key = (lm_state, new_covered_words, s)
                         new_stack = len(h.covered_words) + len(new_words)
                         assert(new_stack == len(new_covered_words))
                         if key not in stacks[new_stack] or stacks[new_stack][key].logprob < logprob: # second case is recombination
                             stacks[new_stack][key] = new_hypothesis
+
                   else:
                     pass
 
@@ -81,3 +85,19 @@ for f in input_sents:
         tm_logprob = extract_tm_logprob(winner)
         sys.stderr.write('LM = %f, TM = %f, Total = %f\n' % 
             (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
+
+def future_cost(covered_words, f, tm):
+    phrase_start = 0
+    phrase_end = 0
+    logprob = 0
+    for i in xrange(len(covered_words)):
+        phrase_end = covered_words[i]
+        if not(phrase_end == phrase_start):
+            phrase = f[phrase_start:phrase_end]
+            if phrase in tm:
+                logprob = logprob + tm[phrase][0].logprob
+            else:
+                logprob = float("-inf")
+        phrase_start = covered_words[i]+1
+
+    return logprob
