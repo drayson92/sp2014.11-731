@@ -6,6 +6,23 @@ import heapq
 import itertools
 from collections import namedtuple
 
+def future_cost(covered_words, f, tm):
+    phrase_start = 0
+    phrase_end = 0
+    logprob = 0
+    for i in xrange(len(covered_words)):
+        phrase_end = covered_words[i]
+        if not(phrase_end == phrase_start):
+            phrase = f[phrase_start:phrase_end]
+            if phrase in tm:
+                logprob = logprob + tm[phrase][0].logprob
+            else:
+                logprob = float("-inf")
+        phrase_start = covered_words[i]+1
+
+    return logprob
+
+
 parser = argparse.ArgumentParser(description='Simple phrase based decoder.')
 parser.add_argument('-i', '--input', dest='input', default='data/input', help='File containing sentences to translate (default=data/input)')
 parser.add_argument('-t', '--translation-model', dest='tm', default='data/tm', help='File containing translation model (default=data/tm)')
@@ -29,7 +46,7 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset())
+    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset(),0)
 
     stacks = [{} for _ in f] + [{}]
     stacks[0][(lm.begin(), frozenset())] = initial_hypothesis
@@ -54,7 +71,7 @@ for f in input_sents:
                             logprob += word_logprob
                         logprob += lm.end(lm_state) if e == len(f) else 0.0
                         new_covered_words = h.covered_words | new_words
-                        new_future_cost = 0
+                        new_future_cost = future_cost(new_covered_words, f, tm)
                         logprob = logprob + new_future_cost
                         new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words, new_future_cost)
                         
@@ -86,18 +103,4 @@ for f in input_sents:
         sys.stderr.write('LM = %f, TM = %f, Total = %f\n' % 
             (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
 
-def future_cost(covered_words, f, tm):
-    phrase_start = 0
-    phrase_end = 0
-    logprob = 0
-    for i in xrange(len(covered_words)):
-        phrase_end = covered_words[i]
-        if not(phrase_end == phrase_start):
-            phrase = f[phrase_start:phrase_end]
-            if phrase in tm:
-                logprob = logprob + tm[phrase][0].logprob
-            else:
-                logprob = float("-inf")
-        phrase_start = covered_words[i]+1
 
-    return logprob
