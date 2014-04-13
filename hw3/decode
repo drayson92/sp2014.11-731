@@ -5,7 +5,7 @@ import models
 import heapq
 import itertools
 from collections import namedtuple
-
+    
 parser = argparse.ArgumentParser(description='Simple phrase based decoder.')
 parser.add_argument('-i', '--input', dest='input', default='data/input', help='File containing sentences to translate (default=data/input)')
 parser.add_argument('-t', '--translation-model', dest='tm', default='data/tm', help='File containing translation model (default=data/tm)')
@@ -14,6 +14,70 @@ parser.add_argument('-n', '--num_sentences', dest='num_sents', default=sys.maxin
 parser.add_argument('-l', '--language-model', dest='lm', default='data/lm', help='File containing ARPA-format language model (default=data/lm)')
 parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False,  help='Verbose mode (default=off)')
 opts = parser.parse_args()
+
+def old_gap_translatable(covered_words, f):
+  n = len(f)
+  all_words = set(range(n))
+  gap_words = all_words - covered_words
+  covered = set()
+
+  for i in gap_words:
+    if i in covered:
+      continue
+
+    good = False
+    max_phrase_len = 3
+    for l in xrange(max_phrase_len, 0, -1):
+    #for l in xrange(1, max_phrase_len + 1):
+      cand_set = set(range(i, i+l))
+      if f[i:i+l] in tm and cand_set <= gap_words and cand_set.isdisjoint(covered):
+        good = True
+        covered |= set(range(i, i+l))
+        break
+
+    if not good:
+      return False
+
+  return True
+
+def gaps_translatable(covered_words, f):
+  n = len(f)
+  all_words = set(range(n))
+  gap_words = all_words - covered_words
+  #if opts.verbose:
+  #  print "Gap words: %s" % gap_words
+
+  i = 0
+  while i < n:
+    if i in gap_words:
+      #find end of gap
+      j = i
+      while j in gap_words:
+        j += 1
+
+      if not range_translatable(f, i, j):
+        #if opts.verbose:
+        #  print "Untranslatable gap: [%d,%d)" % (i,j)
+        return False
+      else:
+        i = j #skip to end of gap
+    else:
+      i += 1
+
+  return True
+
+def range_translatable(f, i, j):
+  if i >= j:
+    return False
+  elif f[i:j] in tm:
+    return True
+  else:
+    return (f[i:i+1] in tm and range_translatable(f, i+1, j)) or \
+           (f[i:i+2] in tm and range_translatable(f, i+2, j)) or \
+           (f[i:i+3] in tm and range_translatable(f, i+3, j)) or \
+           (f[j-1:j] in tm and range_translatable(f, i, j-1)) or \
+           (f[j-2:j] in tm and range_translatable(f, i, j-2)) or \
+           (f[j-3:j] in tm and range_translatable(f, i, j-3))
 
 tm = models.TM(opts.tm, sys.maxint)
 lm = models.LM(opts.lm)
@@ -37,12 +101,15 @@ for f in input_sents:
         # extend the top s hypotheses in the current stack
         for h in heapq.nlargest(opts.s, stack.itervalues(), key=lambda h: h.logprob): # prune
             assert(len(h.covered_words) == i)
-            for s in xrange(0, len(f)+1):
+            for s in set(range(0, len(f)+1)) - h.covered_words:
+            #for s in xrange(0, len(f)+1):
+            #  if len(h.covered_words) > 0 and len(h.covered_words) > max(h.covered_words)+1 and s > max(h.covered_words):
+            #    continue
               for e in xrange(s+1, len(f)+1):
                   new_words = set(xrange(s, e))
-                  assert(len(new_words) == e-s)
+                  #don't go over the edge of the gap
                   if not h.covered_words.isdisjoint(new_words):
-                    continue
+                    break
 
                   if f[s:e] in tm:
                     for phrase in tm[f[s:e]]:
@@ -53,6 +120,10 @@ for f in input_sents:
                             logprob += word_logprob
                         logprob += lm.end(lm_state) if e == len(f) else 0.0
                         new_covered_words = h.covered_words | new_words
+
+                        if not gaps_translatable(new_covered_words, f):
+                          continue
+
                         new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words)
                         
                         key = (lm_state, new_covered_words, s)
