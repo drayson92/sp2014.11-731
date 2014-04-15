@@ -3,9 +3,8 @@ import argparse
 import sys
 import models
 import heapq
-import itertools
 from collections import namedtuple
-    
+
 parser = argparse.ArgumentParser(description='Simple phrase based decoder.')
 parser.add_argument('-i', '--input', dest='input', default='data/input', help='File containing sentences to translate (default=data/input)')
 parser.add_argument('-t', '--translation-model', dest='tm', default='data/tm', help='File containing translation model (default=data/tm)')
@@ -15,91 +14,12 @@ parser.add_argument('-l', '--language-model', dest='lm', default='data/lm', help
 parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False,  help='Verbose mode (default=off)')
 opts = parser.parse_args()
 
-def old_gap_translatable(covered_words, f):
-  n = len(f)
-  all_words = set(range(n))
-  gap_words = all_words - covered_words
-  covered = set()
-
-  for i in gap_words:
-    if i in covered:
-      continue
-
-    good = False
-    max_phrase_len = 3
-    for l in xrange(max_phrase_len, 0, -1):
-    #for l in xrange(1, max_phrase_len + 1):
-      cand_set = set(range(i, i+l))
-      if f[i:i+l] in tm and cand_set <= gap_words and cand_set.isdisjoint(covered):
-        good = True
-        covered |= set(range(i, i+l))
-        break
-
-    if not good:
-      return False
-
-  return True
-
-def gaps_translatable(covered_words, f):
-  n = len(f)
-  all_words = set(range(n))
-  gap_words = all_words - covered_words
-  #if opts.verbose:
-  #  print "Gap words: %s" % gap_words
-
-  i = 0
-  while i < n:
-    if i in gap_words:
-      #find end of gap
-      j = i
-      while j in gap_words:
-        j += 1
-
-      if not range_translatable(f, i, j):
-        #if opts.verbose:
-        #  print "Untranslatable gap: [%d,%d)" % (i,j)
-        return False
-      else:
-        i = j #skip to end of gap
-    else:
-      i += 1
-
-  return True
-
-def range_translatable(f, i, j):
-  if i >= j:
-    return False
-  elif f[i:j] in tm:
-    return True
-  else:
-    return (f[i:i+1] in tm and range_translatable(f, i+1, j)) or \
-           (f[i:i+2] in tm and range_translatable(f, i+2, j)) or \
-           (f[i:i+3] in tm and range_translatable(f, i+3, j)) or \
-           (f[j-1:j] in tm and range_translatable(f, i, j-1)) or \
-           (f[j-2:j] in tm and range_translatable(f, i, j-2)) or \
-           (f[j-3:j] in tm and range_translatable(f, i, j-3))
-
-def future_cost(covered_words, f):
-    phrase_start = 0
-    phrase_end = 0
-    logprob = 0
-    for phrase_end in covered_words:
-        if not(phrase_end == phrase_start):
-            phrase = f[phrase_start:phrase_end]
-            if phrase in tm:
-                logprob = logprob + tm[phrase][0].logprob
-            else:
-                logprob = float("-inf")
-        phrase_start = phrase_end+1
-
-    return logprob
-
 tm = models.TM(opts.tm, sys.maxint)
 lm = models.LM(opts.lm)
 sys.stderr.write('Decoding %s...\n' % (opts.input,))
 input_sents = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
 
-hypothesis = namedtuple('hypothesis', 'logprob, lm_state, predecessor, phrase, covered_words, future_cost')
+hypothesis = namedtuple('hypothesis', 'logprob, lm_state, predecessor, phrase')
 for f in input_sents:
     # The following code implements a DP monotone decoding
     # algorithm (one that doesn't permute the target phrases).
@@ -108,59 +28,57 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset(), 0.0)
+    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None)
 
     stacks = [{} for _ in f] + [{}]
-    stacks[0][(lm.begin(), frozenset())] = initial_hypothesis
+    stacks[0][lm.begin()] = initial_hypothesis
     for i, stack in enumerate(stacks[:-1]):
         # extend the top s hypotheses in the current stack
         for h in heapq.nlargest(opts.s, stack.itervalues(), key=lambda h: h.logprob): # prune
-            assert(len(h.covered_words) == i)
-            for s in set(range(0, len(f)+1)) - h.covered_words:
-            #for s in xrange(0, len(f)+1):
-            #  if len(h.covered_words) > 0 and len(h.covered_words) > max(h.covered_words)+1 and s > max(h.covered_words):
-            #    continue
-              for e in xrange(s+1, len(f)+1):
-                  new_words = set(xrange(s, e))
-                  #don't go over the edge of the gap
-                  if not h.covered_words.isdisjoint(new_words):
-                    break
-
-                  if f[s:e] in tm:
-                    for phrase in tm[f[s:e]]:
-                       
-                        logprob = h.logprob + phrase.logprob - h.future_cost
+            for j in xrange(i+1,len(f)+1):
+                if f[i:j] in tm:
+                    for phrase in tm[f[i:j]]:
+                        logprob = h.logprob + phrase.logprob
                         lm_state = h.lm_state
                         for word in phrase.english.split():
                             (lm_state, word_logprob) = lm.score(lm_state, word)
                             logprob += word_logprob
-                        logprob += lm.end(lm_state) if e == len(f) else 0.0
-                        new_covered_words = h.covered_words | new_words
+                        logprob += lm.end(lm_state) if j == len(f) else 0.0
+                        new_hypothesis_noswap = hypothesis(logprob, lm_state, h, phrase)
+                        if lm_state not in stacks[j] or stacks[j][lm_state].logprob < logprob: # second case is recombination
+                            stacks[j][lm_state] = new_hypothesis_noswap
 
-                        if not gaps_translatable(new_covered_words, f):
+                        #see if we can swap with an adjacent phrase
+                        if j == len(f):
                           continue
 
-                        new_future_cost = future_cost(new_covered_words, f)
-                        logprob = logprob + new_future_cost
-                        new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words, new_future_cost)
-                        
-                        key = (lm_state, new_covered_words, s)
-                        new_stack = len(h.covered_words) + len(new_words)
-                        assert(new_stack == len(new_covered_words))
-                        if key not in stacks[new_stack] or stacks[new_stack][key].logprob < logprob: # second case is recombination
-                            stacks[new_stack][key] = new_hypothesis
+                        for k in xrange(j+1, len(f)+1):
+                          if f[j:k] in tm:
+                            for next_phrase in tm[f[j:k]]:
+                              first_logprob = h.logprob + next_phrase.logprob
+                              lm_state = h.lm_state
+                              for word in next_phrase.english.split():
+                                (lm_state, word_logprob) = lm.score(lm_state, word)
+                                first_logprob += word_logprob
+                              first_logprob += lm.end(lm_state) if k == len(f) else 0.0
+                              first_lm_state = lm_state
 
-                  else:
-                    pass
+                              combined_logprob = h.logprob + next_phrase.logprob + phrase.logprob
+                              lm_state = h.lm_state
+                              combined_phrase = next_phrase.english.split() + phrase.english.split()
+                              for word in combined_phrase:
+                                (lm_state, word_logprob) = lm.score(lm_state, word)
+                                combined_logprob += word_logprob
+                              combined_logprob += lm.end(lm_state) if k == len(f) else 0.0
+                              
+                              new_hypothesis_swap_first = hypothesis(first_logprob, first_lm_state, h, next_phrase)
+                              new_hypothesis_swap = hypothesis(combined_logprob, lm_state, new_hypothesis_swap_first, phrase)
+                              if lm_state not in stacks[k] or stacks[k][lm_state].logprob < combined_logprob:
+                                stacks[k][lm_state] = new_hypothesis_swap
 
     # find best translation by looking at the best scoring hypothesis
     # on the last stack
-    if opts.verbose:
-      stack_lens = [len(s) for s in stacks]
-      print "Stack sizes: %s" % stack_lens
-
     winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
-    assert(len(winner.covered_words) == len(f))
     def extract_english_recursive(h):
         return '' if h.predecessor is None else '%s%s ' % (extract_english_recursive(h.predecessor), h.phrase.english)
     print extract_english_recursive(winner)
@@ -171,5 +89,3 @@ for f in input_sents:
         tm_logprob = extract_tm_logprob(winner)
         sys.stderr.write('LM = %f, TM = %f, Total = %f\n' % 
             (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
-
-
