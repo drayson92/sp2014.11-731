@@ -6,23 +6,6 @@ import heapq
 import itertools
 from collections import namedtuple
 
-def future_cost(covered_words, f, tm):
-    phrase_start = 0
-    phrase_end = 0
-    logprob = 0
-    for i in xrange(len(covered_words)):
-        phrase_end = covered_words[i]
-        if not(phrase_end == phrase_start):
-            phrase = f[phrase_start:phrase_end]
-            if phrase in tm:
-                logprob = logprob + tm[phrase][0].logprob
-            else:
-                logprob = float("-inf")
-        phrase_start = covered_words[i]+1
-
-    return logprob
-
-
 parser = argparse.ArgumentParser(description='Simple phrase based decoder.')
 parser.add_argument('-i', '--input', dest='input', default='data/input', help='File containing sentences to translate (default=data/input)')
 parser.add_argument('-t', '--translation-model', dest='tm', default='data/tm', help='File containing translation model (default=data/tm)')
@@ -31,6 +14,111 @@ parser.add_argument('-n', '--num_sentences', dest='num_sents', default=sys.maxin
 parser.add_argument('-l', '--language-model', dest='lm', default='data/lm', help='File containing ARPA-format language model (default=data/lm)')
 parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False,  help='Verbose mode (default=off)')
 opts = parser.parse_args()
+
+def old_gap_translatable(covered_words, f):
+  n = len(f)
+  all_words = set(range(n))
+  gap_words = all_words - covered_words
+  covered = set()
+
+  for i in gap_words:
+    if i in covered:
+      continue
+
+    good = False
+    max_phrase_len = 3
+    for l in xrange(max_phrase_len, 0, -1):
+    #for l in xrange(1, max_phrase_len + 1):
+      cand_set = set(range(i, i+l))
+      if f[i:i+l] in tm and cand_set <= gap_words and cand_set.isdisjoint(covered):
+        good = True
+        covered |= set(range(i, i+l))
+        break
+
+    if not good:
+      return False
+
+  return True
+
+def gaps_translatable(covered_words, f):
+  n = len(f)
+  all_words = set(range(n))
+  gap_words = all_words - covered_words
+  #if opts.verbose:
+  #  print "Gap words: %s" % gap_words
+
+  i = 0
+  while i < n:
+    if i in gap_words:
+      #find end of gap
+      j = i
+      while j in gap_words:
+        j += 1
+
+      if not range_translatable(f, i, j):
+        #if opts.verbose:
+        #  print "Untranslatable gap: [%d,%d)" % (i,j)
+        return False
+      else:
+        i = j #skip to end of gap
+    else:
+      i += 1
+
+  return True
+
+def range_translatable(f, i, j):
+  if i >= j:
+    return False
+  elif f[i:j] in tm:
+    return True
+  else:
+    return (f[i:i+1] in tm and range_translatable(f, i+1, j)) or \
+           (f[i:i+2] in tm and range_translatable(f, i+2, j)) or \
+           (f[i:i+3] in tm and range_translatable(f, i+3, j)) or \
+           (f[j-1:j] in tm and range_translatable(f, i, j-1)) or \
+           (f[j-2:j] in tm and range_translatable(f, i, j-2)) or \
+           (f[j-3:j] in tm and range_translatable(f, i, j-3))
+
+def optimal_future_cost(phrase, i,j, memo):
+    if i == j:
+        return 0
+    if (i,j) in memo:
+        return memo[(i,j)]
+    max_logprob = 0
+    has_changed = False
+    for k in xrange(i,j):
+        fixed_chunk = phrase[k:j]
+        if not( fixed_chunk in tm):
+            continue
+        has_changed = True
+        logprob = tm[fixed_chunk][0].logprob + optimal_future_cost(phrase, i,k,memo);
+        if k==i:
+            max_logprob = logprob
+        else:
+            max_logprob = max(logprob, max_logprob)
+    if not(has_changed):
+        max_logprob = float("-inf")
+    memo[(i,j)] = max_logprob
+    return max_logprob
+
+
+def future_cost(covered_words, f):
+    phrase_start = 0
+    phrase_end = 0
+    logprob = 0
+    for phrase_end in covered_words:
+        if not(phrase_end == phrase_start):
+            phrase = f[phrase_start:phrase_end]
+            if phrase in tm:
+                logprob = logprob + optimal_future_cost(phrase, 0, len(phrase), {})
+                #logprob = logprob + tm[phrase][0].logprob
+            else:
+                logprob = float("-inf")
+        phrase_start = phrase_end+1
+
+    return logprob
+
+
 
 tm = models.TM(opts.tm, sys.maxint)
 lm = models.LM(opts.lm)
@@ -46,7 +134,9 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset(),0)
+
+    initial_hypothesis = hypothesis(0.0, lm.begin(), None, None, frozenset(), 0.0)
+
 
     stacks = [{} for _ in f] + [{}]
     stacks[0][(lm.begin(), frozenset())] = initial_hypothesis
@@ -54,12 +144,15 @@ for f in input_sents:
         # extend the top s hypotheses in the current stack
         for h in heapq.nlargest(opts.s, stack.itervalues(), key=lambda h: h.logprob): # prune
             assert(len(h.covered_words) == i)
-            for s in xrange(0, len(f)+1):
+            for s in set(range(0, len(f)+1)) - h.covered_words:
+            #for s in xrange(0, len(f)+1):
+            #  if len(h.covered_words) > 0 and len(h.covered_words) > max(h.covered_words)+1 and s > max(h.covered_words):
+            #    continue
               for e in xrange(s+1, len(f)+1):
                   new_words = set(xrange(s, e))
-                  assert(len(new_words) == e-s)
+                  #don't go over the edge of the gap
                   if not h.covered_words.isdisjoint(new_words):
-                    continue
+                    break
 
                   if f[s:e] in tm:
                     for phrase in tm[f[s:e]]:
@@ -71,7 +164,13 @@ for f in input_sents:
                             logprob += word_logprob
                         logprob += lm.end(lm_state) if e == len(f) else 0.0
                         new_covered_words = h.covered_words | new_words
-                        new_future_cost = future_cost(new_covered_words, f, tm)
+
+
+                        if not gaps_translatable(new_covered_words, f):
+                          continue
+
+                        new_future_cost = future_cost(new_covered_words, f)
+
                         logprob = logprob + new_future_cost
                         new_hypothesis = hypothesis(logprob, lm_state, h, phrase, new_covered_words, new_future_cost)
                         
