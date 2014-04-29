@@ -43,8 +43,30 @@ def read_phrase_model(filename):
 
 	return source_by_target
 
-def combine_phrase_models(cluster_model, phrase_model):
+def combine_phrase_models(cluster_model, phrase_model , lambda , num_terms):
+	
+	for key in cluster_model:
+		if key not in phrase_model:
+			phrase_model[key] = {}
+			cluter_targets = cluster_model[key]
+			sorted_targets = sorted(cluster_targets.iteritems(), key=operator.itemgetter(1))
+			for i in xrange(num_terms):
+				target = sorted_targets[i]
+				target_word = target[0]
+				prob = target[1]
+				alignments = "0-0"
+				rest = "1 1 1"
+				phrase_model[key][target] = ( (prob , prob) , alignments, rest)
 
+def write_phrase_model(filename,phrase_model):
+	f = open('filename' , 'w')
+	for source in phrase_model:
+		for target in phrase_model:
+			((prob1, prob2) , alignments, rest) = phrase_model[source][target]
+			outstring = ""
+			outstring = outstring + source + "|||" + target + "|||"
+			outstring = outstring + prob1 + " " + prob2 + "|||"
+			outstring = outstring + alignments + "|||" + rest + "\n"
 
 
 
