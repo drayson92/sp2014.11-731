@@ -7,6 +7,7 @@ def read_clusters(file):
     (bitstring, word, freq) = line.split()
     cluster_key = bitstring[:trunc_len]
     clusters[cluster_key].add(word) 
+  return clusters
 
 def cluster_model(word_counts, word_clusters):
 	cluster_by_target = {}
