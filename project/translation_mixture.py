@@ -1,4 +1,5 @@
 import pickle
+import codecs
 import collections
 
 def read_clusters(file):
