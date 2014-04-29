@@ -63,13 +63,13 @@ def read_phrase_model(filename):
 
 	return source_by_target
 
-def combine_phrase_models(cluster_model, phrase_model ,l , num_terms):
+def combine_phrase_models(cluster_model, phrase_model ,l):
 	for key in cluster_model:
 		if key not in phrase_model:
 			phrase_model[key] = {}
 			cluter_targets = cluster_model[key]
 			sorted_targets = sorted(cluster_targets.iteritems(), key=operator.itemgetter(1))
-			for i in xrange(num_terms):
+			for i in xrange(len(sorted_targets)):
 				target = sorted_targets[i]
 				target_word = target[0]
 				prob = float(target[1]) * l
@@ -99,4 +99,7 @@ if __name__ == '__main__':
   clusters = read_clusters(cluster_file)
   cluster_align_table = read_fast_align_table(cluster_aligntable_file)
   phrase_model = read_phrase_model(phrase_model_file)
-  cluster_model = make_cluster_model(word_counts, clusters)
+  cluster_by_source = make_cluster_model(word_counts, clusters)
+  source_by_target = multiply_models(cluster_align_table, cluster_by_source)
+  combine_phrase_models(source_by_target, phrase_model, 1.0)
+  write_phrase_model(out_file, phrase_model)
