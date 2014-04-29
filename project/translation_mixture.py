@@ -8,33 +8,32 @@ def read_clusters(file):
   clusters = collections.defaultdict(set)
   for line in codecs.open(file, encoding='utf-8'):
     (bitstring, word, freq) = line.split()
-    cluster_key = bitstring[:trunc_len]
+    cluster_key = bitstring
     clusters[cluster_key].add(word) 
   return clusters
 
-def read_fast_align_table(file)
+def read_fast_align_table(file):
   tbl = collections.defaultdict(dict)
   for line in codecs.open(file, encoding='utf-8'):
     f, e, lp = line.split()
-    tbl[e][f] = exp(lp)
+    tbl[e][f] = exp(float(lp))
   return tbl
 
 
 def make_cluster_model(word_counts, word_clusters):
-	cluster_by_target = {}
+	cluster_by_source = collections.defaultdict(dict)
 	for cluster in word_clusters:
 		total_count = 0
 		for word in word_clusters[cluster]:
 			total_count = total_count + word_counts[word]
 
-		cluster_by_source[cluster] = {}
 		for word in word_clusters[cluster]:
-			cluster_by_target[cluster][word] = word_counts[word] / total_count
+			cluster_by_source[cluster][word] = word_counts[word] / total_count
 
 	return cluster_by_source
 
 def multiply_models(target_by_cluster, cluster_by_source):
-	source_by_target = {}
+	source_by_target = collections.defaultdict(dict)
 
 	for target_word in target_by_cluster:
 		for cluster in target_by_cluster[target_word]:
@@ -47,10 +46,10 @@ def multiply_models(target_by_cluster, cluster_by_source):
 	return source_by_target
 
 def read_phrase_model(filename):
-	f = codecs.open('filename','r', encoding='utf-8')
-	source_by_target = {}
+	f = codecs.open(filename,'r', encoding='utf-8')
+	source_by_target = collections.defaultdict(dict)
 	for line in f:
-		splits = f.split('|||')
+		splits = line.split('|||')
 		french_phrase = splits[0]
 		englifh_phrase = splits[1]
 		probs = splits[2]
@@ -94,12 +93,25 @@ if __name__ == '__main__':
   word_count_file = sys.argv[4]
   out_file = sys.argv[5]
   
-  word_counts = pickle.load(word_count_file)
+  word_counts = pickle.load(open(word_count_file))
 
+  print "calling read_clusters"
   clusters = read_clusters(cluster_file)
+
+  print "calling read_fast_align_table"
   cluster_align_table = read_fast_align_table(cluster_aligntable_file)
+
+  print "calling read_phrase_model"
   phrase_model = read_phrase_model(phrase_model_file)
+
+  print "calling make_cluster_model"
   cluster_by_source = make_cluster_model(word_counts, clusters)
+
+  print "calling multiply_models"
   source_by_target = multiply_models(cluster_align_table, cluster_by_source)
+
+  print "calling combine_phrase_models"
   combine_phrase_models(source_by_target, phrase_model, 1.0)
+
+  print "calling write_phrase_model"
   write_phrase_model(out_file, phrase_model)
