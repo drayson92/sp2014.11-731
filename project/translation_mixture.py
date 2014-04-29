@@ -1,5 +1,6 @@
 import pickle
 import codecs
+import sys
 import collections
 from math import exp
 
@@ -18,8 +19,9 @@ def read_fast_align_table(file)
     tbl[e][f] = exp(lp)
   return tbl
 
-def cluster_model(word_counts, word_clusters):
-	cluster_by_source = {}
+
+def make_cluster_model(word_counts, word_clusters):
+	cluster_by_target = {}
 	for cluster in word_clusters:
 		total_count = 0
 		for word in word_clusters[cluster]:
@@ -33,17 +35,19 @@ def cluster_model(word_counts, word_clusters):
 
 def multiply_models(target_by_cluster, cluster_by_source):
 	source_by_target = {}
+
 	for target_word in target_by_cluster:
 		for cluster in target_by_cluster[target_word]:
 			cluster_score = target_by_cluster[target_word][cluster]
 			for source_word in cluster_by_source[cluster]:
 				source_by_target[source_word][target_word] = cluster_score * \
 				cluster_by_source[cluster][source_word]
+
 	
 	return source_by_target
 
 def read_phrase_model(filename):
-	f = open('filename','r')
+	f = codecs.open('filename','r', encoding='utf-8')
 	source_by_target = {}
 	for line in f:
 		splits = f.split('|||')
@@ -59,8 +63,7 @@ def read_phrase_model(filename):
 
 	return source_by_target
 
-def combine_phrase_models(cluster_model, phrase_model , lambda , num_terms):
-	
+def combine_phrase_models(cluster_model, phrase_model ,l , num_terms):
 	for key in cluster_model:
 		if key not in phrase_model:
 			phrase_model[key] = {}
@@ -69,20 +72,31 @@ def combine_phrase_models(cluster_model, phrase_model , lambda , num_terms):
 			for i in xrange(num_terms):
 				target = sorted_targets[i]
 				target_word = target[0]
-				prob = target[1]
+				prob = float(target[1]) * l
 				alignments = "0-0"
 				rest = "1 1 1"
 				phrase_model[key][target] = ( (prob , prob) , alignments, rest)
 
 def write_phrase_model(filename,phrase_model):
-	f = open('filename' , 'w')
-	for source in phrase_model:
-		for target in phrase_model:
+	f = codecs.open('filename' , 'w', encoding='utf-8')
+	for source in sorted(phrase_model):
+		for target in sorted(phrase_model):
 			((prob1, prob2) , alignments, rest) = phrase_model[source][target]
 			outstring = ""
 			outstring = outstring + source + "|||" + target + "|||"
 			outstring = outstring + prob1 + " " + prob2 + "|||"
 			outstring = outstring + alignments + "|||" + rest + "\n"
 
+if __name__ == '__main__':
+  cluster_file = sys.argv[2]
+  cluster_aligntable_file = sys.argv[2]
+  phrase_model_file = sys.argv[3]
+  word_count_file = sys.argv[4]
+  out_file = sys.argv[5]
+  
+  word_counts = pickle.load(word_count_file)
 
-
+  clusters = read_clusters(cluster_file)
+  cluster_align_table = read_fast_align_table(cluster_aligntable_file)
+  phrase_model = read_phrase_model(phrase_model_file)
+  cluster_model = make_cluster_model(word_counts, clusters)
