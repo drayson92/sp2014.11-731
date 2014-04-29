@@ -1,6 +1,7 @@
 import pickle
 import codecs
 import collections
+from math import exp
 
 def read_clusters(file):
   clusters = collections.defaultdict(set)
@@ -9,6 +10,13 @@ def read_clusters(file):
     cluster_key = bitstring[:trunc_len]
     clusters[cluster_key].add(word) 
   return clusters
+
+def read_fast_align_table(file)
+  tbl = collections.defaultdict(dict)
+  for line in codecs.open(file, encoding='utf-8'):
+    f, e, lp = line.split()
+    tbl[f][e] = exp(lp)
+  return tbl
 
 def cluster_model(word_counts, word_clusters):
 	cluster_by_target = {}
@@ -24,7 +32,6 @@ def cluster_model(word_counts, word_clusters):
 	return cluster_by_target
 
 def multiply_models(source_by_cluster, cluster_by_target):
-
 	source_by_target = {}
 	for source_word in source_by_cluster:
 		for cluster in source_by_cluster[source_word]:
