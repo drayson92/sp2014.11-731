@@ -1,6 +1,13 @@
 import pickle
 import collections
 
+def read_clusters(file):
+  clusters = collections.defaultdict(set)
+  for line in codecs.open(file, encoding='utf-8'):
+    (bitstring, word, freq) = line.split()
+    cluster_key = bitstring[:trunc_len]
+    clusters[cluster_key].add(word) 
+
 def cluster_model(word_counts, word_clusters):
 	cluster_by_target = {}
 	for cluster in word_clusters:
