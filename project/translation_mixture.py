@@ -15,30 +15,30 @@ def read_fast_align_table(file)
   tbl = collections.defaultdict(dict)
   for line in codecs.open(file, encoding='utf-8'):
     f, e, lp = line.split()
-    tbl[f][e] = exp(lp)
+    tbl[e][f] = exp(lp)
   return tbl
 
 def cluster_model(word_counts, word_clusters):
-	cluster_by_target = {}
+	cluster_by_source = {}
 	for cluster in word_clusters:
 		total_count = 0
 		for word in word_clusters[cluster]:
 			total_count = total_count + word_counts[word]
 
-		cluster_by_target[cluster] = {}
+		cluster_by_source[cluster] = {}
 		for word in word_clusters[cluster]:
 			cluster_by_target[cluster][word] = word_counts[word] / total_count
 
-	return cluster_by_target
+	return cluster_by_source
 
-def multiply_models(source_by_cluster, cluster_by_target):
+def multiply_models(target_by_cluster, cluster_by_source):
 	source_by_target = {}
-	for source_word in source_by_cluster:
-		for cluster in source_by_cluster[source_word]:
-			cluster_score = source_by_cluster[source_word][cluster]
-			for target_word in cluster_by_target[cluster]:
-				source_by_target[(source_word,target_word)] = cluster_score * \
-				cluster_by_target[cluster][target_word]
+	for target_word in target_by_cluster:
+		for cluster in target_by_cluster[target_word]:
+			cluster_score = target_by_cluster[target_word][cluster]
+			for source_word in cluster_by_source[cluster]:
+				source_by_target[source_word][target_word] = cluster_score * \
+				cluster_by_source[cluster][source_word]
 	
 	return source_by_target
 
