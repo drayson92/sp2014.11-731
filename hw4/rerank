@@ -2,27 +2,29 @@
 import optparse
 import sys
 import bleu
+import codecs
 from itertools import izip
-from nltk.classify.naivebayes import NaiveBayesClassifier
-from nltk.probability import UniformProbDist
+from nltk.classify.scikitlearn import SklearnClassifier
+from sklearn.linear_model import LogisticRegression
 
 optparser = optparse.OptionParser()
 optparser.add_option("-k", "--kbest-list", dest="dev_input", default="data/dev.100best", help="100-best translation lists")
 optparser.add_option("-r", "--reference-list", dest="dev_ref_input", default="data/dev.ref") 
 optparser.add_option("-t", "--test-list", dest="test_input", default="data/test.100best") 
-#optparser.add_option("-l", "--lm", dest="lm", default=-1.0, type="float", help="Language model weight")
-#optparser.add_option("-t", "--tm1", dest="tm1", default=-0.5, type="float", help="Translation model p(e|f) weight")
-#optparser.add_option("-s", "--tm2", dest="tm2", default=-0.5, type="float", help="Lexical translation model p_lex(f|e) weight")
 (opts, _) = optparser.parse_args()
-#weights = {'p(e)'       : float(opts.lm) ,
-#           'p(e|f)'     : float(opts.tm1),
-#           'p_lex(f|e)' : float(opts.tm2)}
 
 def rank_sort_key(f1, f2, c):
   d = {}
   for k in f1.keys():
     d[k] = f1[k] - f2[k]
   return c.classify(d)
+
+def is_untranslated(w):
+  try:
+    decoded = w.encode('ascii')
+    return False
+  except UnicodeDecodeError:
+    return True
 
 #from hw2
 def compute_recall(hyp, ref):
@@ -47,9 +49,10 @@ def compute_recall(hyp, ref):
 def create_base_feat_vec(hyp):
   f = {}
   f['len'] = len(hyp.split())
+  f['num_untranslated'] = sum([1.0 for w in hyp.split() if is_untranslated(w)])
   return f
 
-all_refs = [s for s in open(opts.dev_ref_input)]
+all_refs = [s for s in codecs.open(opts.dev_ref_input, encoding='utf-8')]
 all_hyps = [pair.split(' ||| ') for pair in open(opts.dev_input)]
 num_sents = len(all_hyps) / 100
 training_instances = []
@@ -63,7 +66,6 @@ for s in xrange(0, num_sents):
     for feat in feats.split(' '):
       (k, v) = feat.split('=')
       feat_vec[k] = float(v)
-
 
     bleu_stats = [x for x in bleu.bleu_stats(hyp, ref)]
     l = 0.5
@@ -82,7 +84,8 @@ for s in xrange(0, num_sents):
       instance = (f, h1_better)
       training_instances.append(instance)
 
-c = NaiveBayesClassifier.train(training_instances)
+c = SklearnClassifier(LogisticRegression(penalty='l1'))
+c.train(training_instances)
 
 test_hyps = [pair.split(' ||| ') for pair in open(opts.test_input)]
 n = len(test_hyps)/100
