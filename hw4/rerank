@@ -6,11 +6,15 @@ import codecs
 from itertools import izip
 from nltk.classify.scikitlearn import SklearnClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import LinearSVC
 
 optparser = optparse.OptionParser()
 optparser.add_option("-k", "--kbest-list", dest="dev_input", default="data/dev.100best", help="100-best translation lists")
 optparser.add_option("-r", "--reference-list", dest="dev_ref_input", default="data/dev.ref") 
 optparser.add_option("-t", "--test-list", dest="test_input", default="data/test.100best") 
+optparser.add_option("-c", "--C-exp", dest="C", default="1")
+optparser.add_option("-l", "--lambda", dest="l", default="0.7")
 (opts, _) = optparser.parse_args()
 
 def rank_sort_key(f1, f2, c):
@@ -68,7 +72,7 @@ for s in xrange(0, num_sents):
       feat_vec[k] = float(v)
 
     bleu_stats = [x for x in bleu.bleu_stats(hyp, ref)]
-    l = 0.5
+    l = float(opts.l)
     score = l *bleu.bleu(bleu_stats)
     score += (1.0-l) * compute_recall(hyp, ref)
     processed_hyps.append((hyp, score, feat_vec))
@@ -84,7 +88,9 @@ for s in xrange(0, num_sents):
       instance = (f, h1_better)
       training_instances.append(instance)
 
-c = SklearnClassifier(LogisticRegression(penalty='l1'))
+c = SklearnClassifier(LogisticRegression(penalty='l1', C=(2.0**float(opts.C))))
+#c = SklearnClassifier(LinearSVC())
+#c = SklearnClassifier(RandomForestClassifier())
 c.train(training_instances)
 
 test_hyps = [pair.split(' ||| ') for pair in open(opts.test_input)]
